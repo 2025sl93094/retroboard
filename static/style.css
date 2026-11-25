@@ -254,7 +254,7 @@ body {
 .presence-badge {
   display: inline-flex;
   align-items: center;
-  gap: .4rem;
+  gap: .3rem;
   font-size: .75rem;
   font-weight: 600;
   color: #059669;
@@ -263,25 +263,28 @@ body {
   border-radius: 999px;
   padding: .28rem .75rem .28rem .55rem;
   white-space: nowrap;
-  min-width: 7rem;
   letter-spacing: .01em;
 }
 
-.presence-badge::before {
-  content: '';
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 0 2px rgba(16,185,129,.25);
-  animation: pulse-dot 2s ease-in-out infinite;
-  flex-shrink: 0;
+.presence-count {
+  font-size: .72rem;
+  color: #059669;
+  font-weight: 600;
 }
 
-@keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(16,185,129,.25); }
-  50%       { box-shadow: 0 0 0 5px rgba(16,185,129,.10); }
+/* Avatar chip */
+.avatar-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--chip-color, #6b7280);
+  background: #fff;
+  font-size: .88rem;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 /* Header buttons */
@@ -604,4 +607,19 @@ body {
 
   .landing-title { font-size: 2.2rem; }
   .logo-mark     { font-size: 2.4rem; }
+}
+
+/* ── Typing Indicator ──────────────────────────────────────────────────────── */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  min-height: 20px;
+  padding: 0 .1rem;
+}
+
+.typing-label {
+  font-size: .72rem;
+  color: var(--text-subtle);
+  font-style: italic;
 }

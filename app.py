@@ -11,8 +11,8 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = secrets.token_hex(16)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# board_id -> set of connected session IDs
-_board_rooms: dict[str, set] = {}
+# board_id -> { sid: { avatar, color, typing_in } }
+_board_rooms: dict[str, dict] = {}
 BOARDS_DIR = Path("boards")
 BOARDS_DIR.mkdir(exist_ok=True)
 
@@ -189,25 +189,64 @@ def export_board(board_id):
 
 # ── Socket.IO events ──────────────────────────────────────────────────────────
 
+def _emit_presence(board_id: str) -> None:
+    room = _board_rooms.get(board_id, {})
+    users = [{"avatar": v["avatar"], "color": v["color"]} for v in room.values()]
+    socket_emit("presence", {"count": len(room), "users": users}, to=board_id)
+
+
+def _emit_typing(board_id: str) -> None:
+    room = _board_rooms.get(board_id, {})
+    typing = [
+        {"avatar": v["avatar"], "color": v["color"], "column": v["typing_in"]}
+        for v in room.values() if v["typing_in"]
+    ]
+    socket_emit("typing_update", {"typing": typing}, to=board_id)
+
+
 @socketio.on("join_board")
 def on_join(data):
     board_id = data.get("board_id")
     if not board_id:
         return
     join_room(board_id)
-    _board_rooms.setdefault(board_id, set()).add(request.sid)
-    count = len(_board_rooms[board_id])
-    socket_emit("presence", {"count": count}, to=board_id)
+    _board_rooms.setdefault(board_id, {})[request.sid] = {
+        "avatar": data.get("avatar", "?"),
+        "color": data.get("color", "#6b7280"),
+        "typing_in": None,
+    }
+    _emit_presence(board_id)
+
+
+@socketio.on("typing_start")
+def on_typing_start(data):
+    board_id = data.get("board_id")
+    column = data.get("column")
+    if not board_id or board_id not in _board_rooms:
+        return
+    if request.sid in _board_rooms[board_id]:
+        _board_rooms[board_id][request.sid]["typing_in"] = column
+    _emit_typing(board_id)
+
+
+@socketio.on("typing_stop")
+def on_typing_stop(data):
+    board_id = data.get("board_id")
+    if not board_id or board_id not in _board_rooms:
+        return
+    if request.sid in _board_rooms[board_id]:
+        _board_rooms[board_id][request.sid]["typing_in"] = None
+    _emit_typing(board_id)
 
 
 @socketio.on("disconnect")
 def on_disconnect():
     sid = request.sid
-    for board_id, sids in _board_rooms.items():
-        if sid in sids:
-            sids.discard(sid)
-            count = len(sids)
-            socket_emit("presence", {"count": count}, to=board_id)
+    for board_id, room in _board_rooms.items():
+        if sid in room:
+            room.pop(sid)
+            _emit_presence(board_id)
+            _emit_typing(board_id)
             break
 
 
@@ -216,4 +255,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=5000)
     args = parser.parse_args()
-    socketio.run(app, debug=True, port=args.port)
+    socketio.run(app, debug=True, port=args.port, allow_unsafe_werkzeug=True)
