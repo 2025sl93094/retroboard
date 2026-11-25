@@ -1,7 +1,7 @@
 import json
 import secrets
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, abort
@@ -53,8 +53,15 @@ def index():
 
 @app.route("/board/<board_id>")
 def board(board_id):
-    _load_board(board_id)   # 404 if missing
-    return render_template("board.html", board_id=board_id)
+    data = _load_board(board_id)   # 404 if missing
+    fac_token = request.args.get("facilitator", "")
+    is_facilitator = bool(fac_token and fac_token == data.get("facilitator_token", ""))
+    return render_template(
+        "board.html",
+        board_id=board_id,
+        is_facilitator=is_facilitator,
+        facilitator_token=fac_token if is_facilitator else "",
+    )
 
 
 # ── API ───────────────────────────────────────────────────────────────────────
@@ -63,26 +70,50 @@ def board(board_id):
 def create_board():
     body = request.get_json(silent=True) or {}
     board_id = _new_id()
+    facilitator_token = _new_id(16)
     data = {
         "id": board_id,
         "title": body.get("title", "Sprint Retrospective"),
         "created_at": datetime.utcnow().isoformat() + "Z",
         "columns": {col: [] for col in COLUMNS},
         "votes_by_user": {},
+        "facilitator_token": facilitator_token,
+        "phase": "collecting",
+        "notes_revealed": False,
+        "columns_locked": False,
+        "voting_ends_at": None,
     }
     _save_board(board_id, data)
-    return jsonify({"id": board_id}), 201
+    return jsonify({"id": board_id, "facilitator_token": facilitator_token}), 201
 
 
 @app.route("/api/boards/<board_id>", methods=["GET"])
 def get_board(board_id):
-    return jsonify(_load_board(board_id))
+    data = _load_board(board_id)
+    fac_token = request.args.get("facilitator_token", "")
+    is_facilitator = bool(fac_token and fac_token == data.get("facilitator_token", ""))
+
+    # Never expose the facilitator token in the response
+    out = {k: v for k, v in data.items() if k != "facilitator_token"}
+
+    # Redact note text if notes are not yet revealed (and requester is not facilitator)
+    if not data.get("notes_revealed", False) and not is_facilitator:
+        for col in COLUMNS:
+            redacted = []
+            for note in out["columns"][col]:
+                redacted.append({**note, "text": "", "hidden": True})
+            out["columns"][col] = redacted
+
+    return jsonify(out)
 
 
 @app.route("/api/boards/<board_id>/notes", methods=["POST"])
 def add_note(board_id):
     data = _load_board(board_id)
     body = request.get_json(silent=True) or {}
+
+    if data.get("columns_locked", False):
+        return jsonify({"error": "Columns are locked by the facilitator"}), 403
 
     column = body.get("column")
     text = (body.get("text") or "").strip()
@@ -155,6 +186,88 @@ def delete_note(board_id, note_id):
                 socketio.emit("board_updated", {}, to=board_id)
                 return jsonify({"ok": True})
     return jsonify({"error": "Note not found"}), 404
+
+
+# ── Facilitator helpers ───────────────────────────────────────────────────────
+
+def _board_state(data: dict) -> dict:
+    return {
+        "phase": data.get("phase", "collecting"),
+        "notes_revealed": data.get("notes_revealed", False),
+        "columns_locked": data.get("columns_locked", False),
+        "voting_ends_at": data.get("voting_ends_at"),
+    }
+
+
+def _check_facilitator(board_id: str, body: dict):
+    data = _load_board(board_id)
+    token = (body.get("facilitator_token") or "").strip()
+    if not token or token != data.get("facilitator_token", ""):
+        return None, (jsonify({"error": "Invalid or missing facilitator token"}), 403)
+    return data, None
+
+
+# ── Facilitator endpoints ─────────────────────────────────────────────────────
+
+@app.route("/api/boards/<board_id>/facilitator/reveal", methods=["POST"])
+def fac_reveal(board_id):
+    body = request.get_json(silent=True) or {}
+    data, err = _check_facilitator(board_id, body)
+    if err:
+        return err
+    data["notes_revealed"] = not data.get("notes_revealed", False)
+    _save_board(board_id, data)
+    state = _board_state(data)
+    socketio.emit("board_state", state, to=board_id)
+    socketio.emit("board_updated", {}, to=board_id)
+    return jsonify(state)
+
+
+@app.route("/api/boards/<board_id>/facilitator/lock", methods=["POST"])
+def fac_lock(board_id):
+    body = request.get_json(silent=True) or {}
+    data, err = _check_facilitator(board_id, body)
+    if err:
+        return err
+    data["columns_locked"] = not data.get("columns_locked", False)
+    _save_board(board_id, data)
+    state = _board_state(data)
+    socketio.emit("board_state", state, to=board_id)
+    return jsonify(state)
+
+
+@app.route("/api/boards/<board_id>/facilitator/phase", methods=["POST"])
+def fac_phase(board_id):
+    body = request.get_json(silent=True) or {}
+    data, err = _check_facilitator(board_id, body)
+    if err:
+        return err
+    phase = body.get("phase", "")
+    if phase not in ("collecting", "voting", "discussing"):
+        return jsonify({"error": "phase must be collecting, voting, or discussing"}), 400
+    data["phase"] = phase
+    _save_board(board_id, data)
+    state = _board_state(data)
+    socketio.emit("board_state", state, to=board_id)
+    return jsonify(state)
+
+
+@app.route("/api/boards/<board_id>/facilitator/timer", methods=["POST"])
+def fac_timer(board_id):
+    body = request.get_json(silent=True) or {}
+    data, err = _check_facilitator(board_id, body)
+    if err:
+        return err
+    minutes = body.get("minutes", 0)
+    if minutes and minutes > 0:
+        ends_at = (datetime.utcnow() + timedelta(minutes=minutes)).isoformat() + "Z"
+        data["voting_ends_at"] = ends_at
+    else:
+        data["voting_ends_at"] = None
+    _save_board(board_id, data)
+    state = _board_state(data)
+    socketio.emit("board_state", state, to=board_id)
+    return jsonify(state)
 
 
 @app.route("/api/boards/<board_id>/export", methods=["GET"])

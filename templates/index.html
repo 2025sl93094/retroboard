@@ -65,7 +65,7 @@
           body: JSON.stringify({ title }),
         });
         const data = await res.json();
-        window.location.href = `/board/${data.id}`;
+        window.location.href = `/board/${data.id}?facilitator=${data.facilitator_token}`;
       } catch {
         btn.disabled = false;
         btn.querySelector('.btn-text').textContent = 'Create Board';
