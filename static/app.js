@@ -1,5 +1,31 @@
 const COLUMNS = ["went_well", "didnt_go_well", "action_items"];
 
+// ── Anonymous avatars ─────────────────────────────────────────────────────────
+
+const ANIMALS = [
+  { emoji: '🦊', color: '#f97316' },
+  { emoji: '🐬', color: '#3b82f6' },
+  { emoji: '🐸', color: '#22c55e' },
+  { emoji: '🦁', color: '#eab308' },
+  { emoji: '🐼', color: '#6b7280' },
+  { emoji: '🦋', color: '#a855f7' },
+  { emoji: '🐧', color: '#0ea5e9' },
+  { emoji: '🦄', color: '#ec4899' },
+  { emoji: '🐻', color: '#78350f' },
+  { emoji: '🦅', color: '#0d9488' },
+];
+
+function getAvatar() {
+  let idx = localStorage.getItem("retro_avatar_idx");
+  if (idx === null) {
+    idx = Math.floor(Math.random() * ANIMALS.length);
+    localStorage.setItem("retro_avatar_idx", String(idx));
+  }
+  return ANIMALS[+idx];
+}
+
+const MY_AVATAR = getAvatar();
+
 // ── User token (persisted per browser) ───────────────────────────────────────
 
 function getUserToken() {
@@ -28,12 +54,16 @@ let _timerInterval = null;
 const socket = io();
 
 socket.on("connect", () => {
-  socket.emit("join_board", { board_id: BOARD_ID });
+  socket.emit("join_board", { board_id: BOARD_ID, avatar: MY_AVATAR.emoji, color: MY_AVATAR.color });
 });
 
-socket.on("presence", ({ count }) => {
+socket.on("presence", ({ count, users }) => {
   const el = document.getElementById("presence");
-  if (el) el.textContent = count === 1 ? "● 1 person active" : `● ${count} people active`;
+  if (!el) return;
+  const chips = (users || []).map(u =>
+    `<span class="avatar-chip" style="--chip-color:${u.color}">${u.avatar}</span>`
+  ).join('');
+  el.innerHTML = chips + `<span class="presence-count">${count} active</span>`;
 });
 
 let _suppressNextBoardUpdate = false;
@@ -44,6 +74,19 @@ socket.on("board_updated", () => {
     return;
   }
   loadBoard();
+});
+
+socket.on("typing_update", ({ typing }) => {
+  COLUMNS.forEach(col => {
+    const el = document.getElementById(`typing-${col}`);
+    if (!el) return;
+    const here = typing.filter(t => t.column === col && t.avatar !== MY_AVATAR.emoji);
+    if (here.length === 0) { el.innerHTML = ""; return; }
+    const chips = here.map(t =>
+      `<span class="avatar-chip" style="--chip-color:${t.color}">${t.avatar}</span>`
+    ).join('');
+    el.innerHTML = chips + '<span class="typing-label">typing…</span>';
+  });
 });
 
 socket.on("board_state", (state) => {
@@ -69,11 +112,24 @@ async function init() {
         addNote(input.id.replace("input-", ""));
       }
     });
+    input.addEventListener("input", () => emitTyping(input.id.replace("input-", "")));
   });
 
   if (IS_FACILITATOR) {
     document.getElementById("facilitatorBar").style.display = "flex";
   }
+}
+
+// ── Typing indicator ──────────────────────────────────────────────────────────
+
+let _typingTimer = null;
+
+function emitTyping(column) {
+  socket.emit("typing_start", { board_id: BOARD_ID, column });
+  clearTimeout(_typingTimer);
+  _typingTimer = setTimeout(() => {
+    socket.emit("typing_stop", { board_id: BOARD_ID });
+  }, 2000);
 }
 
 // ── Load Board ───────────────────────────────────────────────────────────────
