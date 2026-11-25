@@ -301,7 +301,6 @@ async function voteNote(btn) {
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 async function deleteNote(btn) {
-  if (!confirm("Delete this note?")) return;
   const noteId = btn.dataset.id;
   _suppressNextBoardUpdate = true;
   const res = await fetch(`/api/boards/${BOARD_ID}/notes/${noteId}`, { method: "DELETE" });
