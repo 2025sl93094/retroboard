@@ -22,6 +22,33 @@
     </div>
   </header>
 
+  <div class="facilitator-bar" id="facilitatorBar" style="display:none">
+    <span class="fac-badge">⚑ Facilitator</span>
+    <div class="fac-group">
+      <span class="fac-label">Phase</span>
+      <button class="btn-phase" data-phase="collecting" onclick="facPhase('collecting')">Collecting</button>
+      <button class="btn-phase" data-phase="voting" onclick="facPhase('voting')">Voting</button>
+      <button class="btn-phase" data-phase="discussing" onclick="facPhase('discussing')">Discussing</button>
+    </div>
+    <div class="fac-group">
+      <button class="btn-fac-toggle" id="btnReveal" onclick="facReveal()">👁 Reveal Notes</button>
+      <button class="btn-fac-toggle" id="btnLock" onclick="facLock()">🔒 Lock Columns</button>
+    </div>
+    <div class="fac-group">
+      <span class="fac-label">Timer</span>
+      <button class="btn-fac-timer" onclick="facTimer(2)">2m</button>
+      <button class="btn-fac-timer" onclick="facTimer(5)">5m</button>
+      <button class="btn-fac-timer" onclick="facTimer(10)">10m</button>
+      <button class="btn-fac-timer btn-fac-timer-stop" onclick="facTimer(0)">Stop</button>
+    </div>
+    <button class="btn-fac-copy" onclick="copyFacLink()">⎘ Copy Facilitator Link</button>
+  </div>
+
+  <div class="status-banner" id="statusBanner" style="display:none">
+    <span class="phase-chip" id="phaseBadge"></span>
+    <span class="timer-countdown" id="timerCountdown"></span>
+  </div>
+
   <main class="columns-wrapper" id="columnsWrapper">
     <div class="column" id="col-went_well">
       <div class="column-header col-green">
@@ -71,6 +98,8 @@
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
     const BOARD_ID = "{{ board_id }}";
+    const IS_FACILITATOR = {{ 'true' if is_facilitator else 'false' }};
+    const FACILITATOR_TOKEN = "{{ facilitator_token }}";
   </script>
   <script src="/static/app.js"></script>
 </body>

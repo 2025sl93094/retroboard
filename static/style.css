@@ -623,3 +623,198 @@ body {
   color: var(--text-subtle);
   font-style: italic;
 }
+
+/* ── Facilitator Bar ───────────────────────────────────────────────────────── */
+.facilitator-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .6rem .9rem;
+  padding: .6rem 1.75rem;
+  background: linear-gradient(90deg, #1e1b4b, #312e81);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  position: sticky;
+  top: 54px;
+  z-index: 9;
+}
+
+.fac-badge {
+  font-size: .75rem;
+  font-weight: 700;
+  color: #c4b5fd;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding: .2rem .6rem;
+  border: 1px solid rgba(196,181,253,.3);
+  border-radius: 999px;
+}
+
+.fac-group {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+.fac-label {
+  font-size: .72rem;
+  font-weight: 600;
+  color: rgba(255,255,255,.45);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  margin-right: .15rem;
+}
+
+.btn-phase {
+  padding: .28rem .75rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.07);
+  color: rgba(255,255,255,.65);
+  font-size: .76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+  white-space: nowrap;
+}
+
+.btn-phase:hover {
+  background: rgba(255,255,255,.14);
+  color: #fff;
+}
+
+.btn-phase.active {
+  background: #fff;
+  color: #312e81;
+  border-color: #fff;
+}
+
+.btn-fac-toggle {
+  padding: .28rem .8rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.07);
+  color: rgba(255,255,255,.75);
+  font-size: .76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s, box-shadow .15s;
+  white-space: nowrap;
+}
+
+.btn-fac-toggle:hover {
+  background: rgba(255,255,255,.14);
+  color: #fff;
+}
+
+.btn-fac-toggle.active {
+  background: #10b981;
+  border-color: #10b981;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(16,185,129,.25);
+}
+
+.btn-fac-toggle.active-lock {
+  background: #f43f5e;
+  border-color: #f43f5e;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(244,63,94,.25);
+}
+
+.btn-fac-timer {
+  padding: .22rem .6rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.07);
+  color: rgba(255,255,255,.65);
+  font-size: .73rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+
+.btn-fac-timer:hover { background: rgba(255,255,255,.14); color: #fff; }
+
+.btn-fac-timer-stop {
+  color: #fca5a5;
+  border-color: rgba(252,165,165,.3);
+}
+
+.btn-fac-timer-stop:hover { background: rgba(239,68,68,.2); color: #fca5a5; }
+
+.btn-fac-copy {
+  margin-left: auto;
+  padding: .28rem .8rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.07);
+  color: rgba(255,255,255,.65);
+  font-size: .73rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+
+.btn-fac-copy:hover { background: rgba(255,255,255,.14); color: #fff; }
+
+/* ── Status Banner ─────────────────────────────────────────────────────────── */
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .4rem 1.75rem;
+  background: rgba(255,255,255,.6);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.phase-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: .2rem .7rem;
+  border-radius: 999px;
+  font-size: .73rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.phase-chip.phase-collecting {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.phase-chip.phase-voting {
+  background: #f5f3ff;
+  color: #5b21b6;
+  border: 1px solid #ddd6fe;
+}
+
+.phase-chip.phase-discussing {
+  background: #fff7ed;
+  color: #9a3412;
+  border: 1px solid #fed7aa;
+}
+
+.timer-countdown {
+  font-size: .82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-family: 'Courier New', monospace;
+}
+
+/* ── Hidden Notes ──────────────────────────────────────────────────────────── */
+.note-card.hidden-note {
+  background: var(--surface-2);
+  border-color: var(--border);
+  opacity: .75;
+}
+
+.note-hidden-placeholder {
+  color: var(--text-subtle) !important;
+  font-style: italic;
+  font-size: .82rem !important;
+}

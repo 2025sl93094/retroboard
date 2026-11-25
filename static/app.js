@@ -39,6 +39,16 @@ function getUserToken() {
 
 const USER_TOKEN = getUserToken();
 
+// ── Facilitator state ─────────────────────────────────────────────────────────
+
+let _boardState = {
+  phase: "collecting",
+  notes_revealed: false,
+  columns_locked: false,
+  voting_ends_at: null,
+};
+let _timerInterval = null;
+
 // ── Socket.IO ─────────────────────────────────────────────────────────────────
 
 const socket = io();
@@ -79,6 +89,11 @@ socket.on("typing_update", ({ typing }) => {
   });
 });
 
+socket.on("board_state", (state) => {
+  _boardState = state;
+  applyBoardState(state);
+});
+
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 
 async function init() {
@@ -99,6 +114,10 @@ async function init() {
     });
     input.addEventListener("input", () => emitTyping(input.id.replace("input-", "")));
   });
+
+  if (IS_FACILITATOR) {
+    document.getElementById("facilitatorBar").style.display = "flex";
+  }
 }
 
 // ── Typing indicator ──────────────────────────────────────────────────────────
@@ -118,8 +137,12 @@ function emitTyping(column) {
 let _votedNotes = new Set();
 
 async function loadBoard() {
+  const boardUrl = IS_FACILITATOR
+    ? `/api/boards/${BOARD_ID}?facilitator_token=${FACILITATOR_TOKEN}`
+    : `/api/boards/${BOARD_ID}`;
+
   const [boardRes, votesRes] = await Promise.all([
-    fetch(`/api/boards/${BOARD_ID}`),
+    fetch(boardUrl),
     fetch(`/api/boards/${BOARD_ID}/my_votes?user_token=${USER_TOKEN}`),
   ]);
   const data      = await boardRes.json();
@@ -129,6 +152,17 @@ async function loadBoard() {
 
   document.getElementById("boardTitle").textContent = data.title;
   document.title = `${data.title} · RetroBoard`;
+
+  // Sync facilitator state from full board data on initial load
+  if (data.phase !== undefined) {
+    _boardState = {
+      phase: data.phase,
+      notes_revealed: data.notes_revealed,
+      columns_locked: data.columns_locked,
+      voting_ends_at: data.voting_ends_at,
+    };
+    applyBoardState(_boardState);
+  }
 
   COLUMNS.forEach(col => renderColumn(col, data.columns[col] || []));
 }
@@ -152,9 +186,20 @@ function renderColumn(column, notes) {
 
 function buildNoteCard(note, column) {
   const card = document.createElement("div");
-  card.className = "note-card";
   card.dataset.id = note.id;
 
+  if (note.hidden) {
+    card.className = "note-card hidden-note";
+    card.innerHTML = `
+      <p class="note-text note-hidden-placeholder">🔒 Hidden note</p>
+      <div class="note-actions">
+        <button class="btn-vote" disabled title="Reveal notes to vote">▲ <span class="vote-count">${note.votes}</span></button>
+      </div>
+    `;
+    return card;
+  }
+
+  card.className = "note-card";
   const voted = _votedNotes.has(note.id);
 
   card.innerHTML = `
@@ -177,6 +222,11 @@ function buildNoteCard(note, column) {
 // ── Add Note ─────────────────────────────────────────────────────────────────
 
 async function addNote(column) {
+  if (_boardState.columns_locked && !IS_FACILITATOR) {
+    showToast("Columns are locked by the facilitator");
+    return;
+  }
+
   const input = document.getElementById(`input-${column}`);
   const btn   = document.querySelector(`.btn-add[data-column="${column}"]`);
   const text  = input.value.trim();
@@ -275,12 +325,143 @@ async function deleteNote(btn) {
 // ── Copy Link ─────────────────────────────────────────────────────────────────
 
 async function copyLink() {
+  const url = `${location.origin}/board/${BOARD_ID}`;
   try {
-    await navigator.clipboard.writeText(window.location.href);
+    await navigator.clipboard.writeText(url);
     showToast("Board link copied to clipboard ✓");
   } catch {
-    showToast("Copy: " + window.location.href);
+    showToast("Copy: " + url);
   }
+}
+
+async function copyFacLink() {
+  const url = `${location.origin}/board/${BOARD_ID}?facilitator=${FACILITATOR_TOKEN}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast("Facilitator link copied ✓");
+  } catch {
+    showToast("Copy: " + url);
+  }
+}
+
+// ── Board State ───────────────────────────────────────────────────────────────
+
+function applyBoardState(state) {
+  const banner = document.getElementById("statusBanner");
+  const phaseBadge = document.getElementById("phaseBadge");
+  const timerEl = document.getElementById("timerCountdown");
+
+  // Always show the status banner
+  banner.style.display = "flex";
+
+  // Phase badge
+  const phaseLabels = { collecting: "Collecting", voting: "Voting", discussing: "Discussing" };
+  phaseBadge.textContent = phaseLabels[state.phase] || state.phase;
+  phaseBadge.className = `phase-chip phase-${state.phase}`;
+
+  // Update phase buttons active state (facilitator only)
+  document.querySelectorAll(".btn-phase").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.phase === state.phase);
+  });
+
+  // Update reveal button
+  const btnReveal = document.getElementById("btnReveal");
+  if (btnReveal) {
+    btnReveal.textContent = state.notes_revealed ? "🙈 Hide Notes" : "👁 Reveal Notes";
+    btnReveal.classList.toggle("active", state.notes_revealed);
+  }
+
+  // Update lock button
+  const btnLock = document.getElementById("btnLock");
+  if (btnLock) {
+    btnLock.textContent = state.columns_locked ? "🔓 Unlock Columns" : "🔒 Lock Columns";
+    btnLock.classList.toggle("active-lock", state.columns_locked);
+  }
+
+  // Show/hide add-note areas based on lock state
+  document.querySelectorAll(".add-note-area").forEach(area => {
+    area.style.display = (state.columns_locked && !IS_FACILITATOR) ? "none" : "";
+  });
+
+  // Timer countdown
+  clearInterval(_timerInterval);
+  timerEl.textContent = "";
+  if (state.voting_ends_at) {
+    startTimerCountdown(state.voting_ends_at);
+  }
+}
+
+function startTimerCountdown(endsAtIso) {
+  const endsAt = new Date(endsAtIso).getTime();
+  const timerEl = document.getElementById("timerCountdown");
+
+  function tick() {
+    const remaining = endsAt - Date.now();
+    if (remaining <= 0) {
+      clearInterval(_timerInterval);
+      timerEl.textContent = "⏰ Time's up!";
+      return;
+    }
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    timerEl.textContent = `⏱ ${mins}:${String(secs).padStart(2, "0")}`;
+  }
+
+  tick();
+  _timerInterval = setInterval(tick, 1000);
+}
+
+// ── Facilitator actions ───────────────────────────────────────────────────────
+
+async function facReveal() {
+  const res = await fetch(`/api/boards/${BOARD_ID}/facilitator/reveal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ facilitator_token: FACILITATOR_TOKEN }),
+  });
+  if (!res.ok) { showToast("Action failed"); return; }
+  const state = await res.json();
+  _boardState = state;
+  applyBoardState(state);
+  showToast(state.notes_revealed ? "Notes revealed to all" : "Notes hidden");
+}
+
+async function facLock() {
+  const res = await fetch(`/api/boards/${BOARD_ID}/facilitator/lock`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ facilitator_token: FACILITATOR_TOKEN }),
+  });
+  if (!res.ok) { showToast("Action failed"); return; }
+  const state = await res.json();
+  _boardState = state;
+  applyBoardState(state);
+  showToast(state.columns_locked ? "Columns locked" : "Columns unlocked");
+}
+
+async function facPhase(phase) {
+  const res = await fetch(`/api/boards/${BOARD_ID}/facilitator/phase`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ facilitator_token: FACILITATOR_TOKEN, phase }),
+  });
+  if (!res.ok) { showToast("Action failed"); return; }
+  const state = await res.json();
+  _boardState = state;
+  applyBoardState(state);
+}
+
+async function facTimer(minutes) {
+  const res = await fetch(`/api/boards/${BOARD_ID}/facilitator/timer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ facilitator_token: FACILITATOR_TOKEN, minutes }),
+  });
+  if (!res.ok) { showToast("Action failed"); return; }
+  const state = await res.json();
+  _boardState = state;
+  applyBoardState(state);
+  showToast(minutes > 0 ? `Timer set for ${minutes}m` : "Timer stopped");
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
